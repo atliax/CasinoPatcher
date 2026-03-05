@@ -4,4 +4,7 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="CasinoPatcher/CasinoPatcher.vcxproj" Id="89192c97-3114-44b8-8d34-193d87eb9ec5" />
+  <Project Path="GDI3x/GDI3x.vcxproj" Id="d64cb788-8950-495b-890d-e9de5ad2db29">
+    <Platform Project="Win32" />
+  </Project>
 </Solution>

@@ -1,0 +1,11 @@
+LIBRARY gdi3x
+EXPORTS
+	CreateCompatibleBitmap @1
+	CreateDIBSection @2
+	DeleteObject @3
+	GetDIBits @4
+	GetDeviceCaps @5
+	GetStockObject @6
+	PatBlt @7
+	SelectPalette @8
+	SetDIBitsToDevice @9
