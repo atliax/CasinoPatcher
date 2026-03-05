@@ -1,4 +1,4 @@
-# CasinoPatcher v1.0 by atliax
+# CasinoPatcher v1.1 by atliax
 ### Compatibility patch for Leisure Suit Larry's Casino (1998)
 
 CasinoPatcher is a small Windows utility that patches **LCasino.exe** from Sierra's *Leisure Suit Larry's Casino* (1998) to enable it to run on modern systems.
