@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="CasinoPatcher/CasinoPatcher.vcxproj" Id="89192c97-3114-44b8-8d34-193d87eb9ec5" />
+</Solution>

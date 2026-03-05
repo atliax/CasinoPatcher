@@ -1,0 +1,12 @@
+.vs/
+Debug/
+Release/
+x64/
+x86/
+*.user
+*.suo
+*.pdb
+*.obj
+*.ilk
+*.log
+*.aps
