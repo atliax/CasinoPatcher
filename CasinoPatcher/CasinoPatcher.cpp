@@ -56,7 +56,7 @@ static std::string BytesToLowerCaseHex(const BYTE* data, DWORD length)
     return out;
 }
 
-std::string MD5OfFile(const std::wstring& path)
+static std::string MD5OfFile(const std::wstring& path)
 {
     HANDLE hFile = CreateFileW(
         path.c_str(),
@@ -159,7 +159,7 @@ static std::wstring BrowseForFile(HWND owner)
     return L"";
 }
 
-BOOL isRecognized(std::wstring& path)
+static BOOL isRecognized(std::wstring& path)
 {
     std::string md5 = MD5OfFile(path);
     if (md5.empty())
@@ -167,6 +167,148 @@ BOOL isRecognized(std::wstring& path)
         return false;
     }
     return knownVersions.find(md5) != knownVersions.end();
+}
+
+static std::wstring MakeBakPath(const std::wstring& path)
+{
+    size_t slash = path.find_last_of(L"\\/");
+    size_t dot = path.find_last_of(L'.');
+    if (dot == std::wstring::npos || (slash != std::wstring::npos && dot < slash))
+    {
+        return path + L".bak";
+    }
+
+    return path.substr(0, dot) + L".bak";
+}
+
+static BOOL DLLNameReplace(const std::wstring& path, const char find[10], const char replace[10])
+{
+    HANDLE hFile = CreateFileW(
+        path.c_str(),
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
+    );
+
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return FALSE;
+    }
+
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(hFile, &size) || size.QuadPart <= 0 || size.QuadPart > 0x7fffffff)
+    {
+        CloseHandle(hFile);
+        return FALSE;
+    }
+
+    HANDLE hMap = CreateFileMappingW(hFile, nullptr, PAGE_READWRITE, 0, 0, nullptr);
+    if (!hMap)
+    {
+        CloseHandle(hFile);
+        return FALSE;
+    }
+
+    BYTE* data = (BYTE*)MapViewOfFile(hMap, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, 0);
+    if (!data)
+    {
+        CloseHandle(hMap);
+        CloseHandle(hFile);
+        return FALSE;
+    }
+
+    const DWORD fileSize = (DWORD)size.QuadPart;
+    const DWORD patternLen = 10;
+
+    BOOL ok = FALSE;
+
+    for (DWORD i = 0; i + patternLen < fileSize; ++i)
+    {
+        if (memcmp(data + i, find, patternLen) == 0)
+        {
+            memcpy(data + i, replace, patternLen);
+
+            if (FlushViewOfFile(data, 0) && FlushFileBuffers(hFile))
+            {
+                ok = TRUE;
+            }
+
+            break;
+        }
+    }
+
+    UnmapViewOfFile(data);
+    CloseHandle(hMap);
+    CloseHandle(hFile);
+
+    return ok;
+}
+
+static BOOL DoPatching(std::wstring path)
+{
+    constexpr char kFind[10]    = "GDI32.dll";
+    constexpr char kReplace[10] = "GDI3x.dll";
+
+    const std::wstring bakPath = MakeBakPath(path);
+
+    if (!MoveFileExW(path.c_str(), bakPath.c_str(), MOVEFILE_REPLACE_EXISTING))
+    {
+        return FALSE;
+    }
+
+    if (!CopyFileW(bakPath.c_str(), path.c_str(), FALSE))
+    {
+        MoveFileExW(bakPath.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+        return FALSE;
+    }
+
+    if (!DLLNameReplace(path, kFind, kReplace))
+    {
+        DeleteFileW(path.c_str());
+        MoveFileExW(bakPath.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static BOOL CopyShimDLL(const std::wstring& path)
+{
+    wchar_t srcDir[MAX_PATH]{};
+    wchar_t dstDir[MAX_PATH]{};
+    wchar_t srcDll[MAX_PATH]{};
+    wchar_t dstDll[MAX_PATH]{};
+
+    if (!GetModuleFileNameW(nullptr, srcDir, MAX_PATH))
+    {
+        return FALSE;
+    }
+
+    PathRemoveFileSpecW(srcDir);
+    
+    lstrcpynW(srcDll, srcDir, MAX_PATH);
+    PathAppendW(srcDll, L"GDI3x.dll");
+
+    if (GetFileAttributesW(srcDll) == INVALID_FILE_ATTRIBUTES)
+    {
+        return FALSE;
+    }
+
+    lstrcpynW(dstDir, path.c_str(), MAX_PATH);
+    PathRemoveFileSpecW(dstDir);
+
+    lstrcpynW(dstDll, dstDir, MAX_PATH);
+    PathAppendW(dstDll, L"GDI3x.dll");
+
+    if (!CopyFileW(srcDll, dstDll, FALSE))
+    {
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 void CenterWindowOnMonitor(HWND hwnd)
@@ -318,8 +460,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 }
 
                 AppendInfo(L"Patching: " + std::wstring(path));
-                // TODO - do patching here
-                AppendInfo(L"Done.");
+
+                if (DoPatching(std::wstring(path)))
+                {
+                    AppendInfo(L"Done patching.");
+                }
+                else
+                {
+                    AppendInfo(L"Something went wrong during patching!");
+                }
+
+                AppendInfo(L"Copying shim DLL...");
+                
+                if (CopyShimDLL(std::wstring(path)))
+                {
+                    AppendInfo(L"Copied shim DLL successfully.");
+                }
+                else
+                {
+                    AppendInfo(L"Something went wrong during copying of shim DLL.");
+                }
+
                 return 0;
             }
             case IDM_ABOUT:
