@@ -1,6 +1,7 @@
 # CasinoPatcher v1.0 by atliax
+### Compatibility patch for Leisure Suit Larry's Casino (1998)
 
-CasinoPatcher is a small Windows utility that patches the **LCasino.exe** from Sierra's Leisure Suit Larry's Casino from 1998 to enable it to run on modern systems.
+CasinoPatcher is a small Windows utility that patches **LCasino.exe** from Sierra's *Leisure Suit Larry's Casino* (1998) to enable it to run on modern systems.
 It also installs a required compatibility shim (`GDI3x.dll`) into the game directory.
 
 The patcher was tested with the following versions of the game:
@@ -8,7 +9,7 @@ The patcher was tested with the following versions of the game:
 - **1.0.0.3**
 - **1.0.0.5**
 
-Patching other versions is likely to work but is **not guaranteed**.
+Patching other versions is likely to work, but is **not guaranteed**.
 
 ---
 
@@ -39,8 +40,10 @@ LCasino.bak -> LCasino.exe
 
 Your folder should look like this before running the patcher:
 
+```
 CasinoPatcher.exe
 GDI3x.dll
+```
 
 ---
 
@@ -54,17 +57,17 @@ GDI3x.dll
 
 After patching, the game directory should contain:
 
+```
 LCasino.exe      (patched)
-
 LCasino.bak      (original backup)
-
 GDI3x.dll        (compatibility shim)
+```
 
 ---
 
 ## Download
 
-Check *Releases* somewhere on the right side for the latest release.
+Prebuilt binaries are available in the **Releases** section somewhere on the right side of this page.
 
 ---
 
@@ -100,3 +103,8 @@ Then contact me here by creating an issue describing the problem as best you can
 
 This patcher modifies the game executable in memory-safe ways and always creates a backup first, but it is provided **as-is with no warranty**. Use at your own risk.
 
+This project is an unofficial patching tool and is not affiliated with or endorsed by the original developers or publishers of the game.
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
