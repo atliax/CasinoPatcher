@@ -1,6 +1,6 @@
-# CasinoPatcher
+# CasinoPatcher by atliax
 
-CasinoPatcher is a small Windows utility that patches **LCasino.exe** to allow it to run correctly on modern systems.
+CasinoPatcher is a small Windows utility that patches the **LCasino.exe** from Sierra's Leisure Suit Larry's Casino from 1998 to enable it to run on modern systems.
 It also installs a required compatibility shim (`GDI3x.dll`) into the game directory.
 
 The patcher was tested with the following versions of the game:
@@ -16,7 +16,7 @@ Patching other versions is likely to work but is **not guaranteed**.
 
 1. Creates a backup of the original executable:
 
-   LCasino.exe  LCasino.bak
+   LCasino.exe -> LCasino.bak
 
 2. Creates a copy of the backup using the original filename.
 
@@ -27,7 +27,7 @@ Patching other versions is likely to work but is **not guaranteed**.
 The patcher **never modifies the original executable directly**.  
 If something goes wrong, you can restore the original by renaming:
 
-LCasino.bak  LCasino.exe
+LCasino.bak -> LCasino.exe
 
 ---
 
@@ -55,14 +55,22 @@ GDI3x.dll
 After patching, the game directory should contain:
 
 LCasino.exe      (patched)
+
 LCasino.bak      (original backup)
+
 GDI3x.dll        (compatibility shim)
+
+---
+
+## Download
+
+Check *Releases* somewhere on the right side for the latest release.
 
 ---
 
 ## Notes
 
-- The patcher verifies the executable using an **MD5 checksum** for known versions.
+- The patcher verifies the executable using an MD5 checksum for known versions.
 - If the checksum does not match a known version, the patcher will warn you but still allow patching.
 - Use at your own risk when patching unknown versions.
 
@@ -82,7 +90,7 @@ Try running the patcher **as Administrator** or install the game somewhere outsi
 
 Restore the backup:
 
-LCasino.bak  LCasino.exe
+LCasino.bak -> LCasino.exe
 
 Then contact me here by creating an issue describing the problem as best you can.
 
