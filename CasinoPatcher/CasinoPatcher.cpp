@@ -3,18 +3,30 @@
 
 #include <windows.h>
 #include <commdlg.h>
+#include <Shlwapi.h>
+#include <wincrypt.h>
 
 #include <string>
 #include <stdlib.h>
 #include <malloc.h>
 #include <memory.h>
 #include <tchar.h>
+#include <vector>
+#include <unordered_set>
 
 #include "Resource.h"
 
+#pragma comment(lib, "Advapi32.lib")
 #pragma comment(lib, "Comdlg32.lib")
+#pragma comment(lib, "Shlwapi.lib")
 
 #define MAX_LOADSTRING 100
+
+// MD5 sums of the versions tested so far
+std::unordered_set<std::string> knownVersions = {
+    "05d25f2c0d01d09c378a875e4db542b8", // 1.0.0.3
+    "64445f05ea841899118bb8e5a6345606"  // 1.0.0.5
+};
 
 HINSTANCE hInst;
 WCHAR szTitle[MAX_LOADSTRING];
@@ -24,11 +36,102 @@ static HWND g_hEditPath = nullptr;
 static HWND g_hBtnLoad = nullptr;
 static HWND g_hBtnPatch = nullptr;
 static HWND g_hInfo = nullptr;
+static HWND g_hLblPath = nullptr;
 
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
+
+static std::string BytesToLowerCaseHex(const BYTE* data, DWORD length)
+{
+    static const char* kHex = "0123456789abcdef";
+    std::string out;
+    out.resize(length * 2);
+    for (DWORD i = 0; i < length; ++i)
+    {
+        out[i * 2 + 0] = kHex[(data[i] >> 4) & 0xF];
+        out[i * 2 + 1] = kHex[(data[i]) & 0xF];
+    }
+    return out;
+}
+
+std::string MD5OfFile(const std::wstring& path)
+{
+    HANDLE hFile = CreateFileW(
+        path.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+        nullptr
+    );
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return {};
+    }
+
+    HCRYPTPROV hProv = 0;
+    HCRYPTHASH hHash = 0;
+
+    if (!CryptAcquireContextW(&hProv, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
+    {
+        CloseHandle(hFile);
+        return {};
+    }
+
+    if (!CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash))
+    {
+        CryptReleaseContext(hProv, 0);
+        CloseHandle(hFile);
+        return {};
+    }
+
+    constexpr DWORD kBufSize = 1 << 16; //65536 bytes
+    std::vector<BYTE> buf(kBufSize);
+
+    while (true)
+    {
+        DWORD bytesRead = 0;
+        if (!ReadFile(hFile, buf.data(), kBufSize, &bytesRead, nullptr))
+        {
+            CryptDestroyHash(hHash);
+            CryptReleaseContext(hProv, 0);
+            CloseHandle(hFile);
+            return {};
+        }
+
+        if (bytesRead == 0)
+        {
+            break; // reached EOF
+        }
+
+        if (!CryptHashData(hHash, buf.data(), bytesRead, 0))
+        {
+            CryptDestroyHash(hHash);
+            CryptReleaseContext(hProv, 0);
+            CloseHandle(hFile);
+            return {};
+        }
+    }
+
+    BYTE hash[16];
+    DWORD hashLen = sizeof(hash);
+    if (!CryptGetHashParam(hHash, HP_HASHVAL, hash, &hashLen, 0) || hashLen != 16)
+    {
+        CryptDestroyHash(hHash);
+        CryptReleaseContext(hProv, 0);
+        CloseHandle(hFile);
+        return {};
+    }
+
+    CryptDestroyHash(hHash);
+    CryptReleaseContext(hProv, 0);
+    CloseHandle(hFile);
+
+    return BytesToLowerCaseHex(hash, hashLen);
+}
 
 static void AppendInfo(const std::wstring& s)
 {
@@ -54,6 +157,16 @@ static std::wstring BrowseForFile(HWND owner)
         return file;
     }
     return L"";
+}
+
+BOOL isRecognized(std::wstring& path)
+{
+    std::string md5 = MD5OfFile(path);
+    if (md5.empty())
+    {
+        return false;
+    }
+    return knownVersions.find(md5) != knownVersions.end();
 }
 
 void CenterWindowOnMonitor(HWND hwnd)
@@ -118,7 +231,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
     wcex.hInstance      = hInstance;
     wcex.hIcon          = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON1));
     wcex.hCursor        = LoadCursor(nullptr, IDC_ARROW);
-    wcex.hbrBackground  = (HBRUSH)(COLOR_WINDOW+1);
+    wcex.hbrBackground  = (HBRUSH)(COLOR_BTNFACE+1);
     wcex.lpszMenuName   = MAKEINTRESOURCEW(IDC_CASINOPATCHER);
     wcex.lpszClassName  = szWindowClass;
     wcex.hIconSm        = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_ICON1));
@@ -158,18 +271,52 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case IDC_BTN_LOAD:
             {
                 auto path = BrowseForFile(hWnd);
-                if (!path.empty())
+
+                if (path.empty())
                 {
-                    SetWindowTextW(g_hEditPath, path.c_str());
-                    EnableWindow(g_hBtnPatch, TRUE);
-                    AppendInfo(L"Selected: " + path);
+                    SetWindowTextW(g_hEditPath, L"");
+                    EnableWindow(g_hBtnPatch, FALSE);
+                    AppendInfo(L"File selection aborted.");
+                    return 0;
                 }
+
+                SetWindowTextW(g_hEditPath, path.c_str());
+                EnableWindow(g_hBtnPatch, TRUE);
+                AppendInfo(L"Selected: " + path);
+
+                if (isRecognized(path))
+                {
+                    AppendInfo(L"Selected .exe file is a recognized version.");
+                }
+                else
+                {
+                    AppendInfo(L"Unrecognized .exe file hash.");
+                    MessageBoxW(hWnd, L"That .exe is not a version I recognize but if it is indeed LCasino.exe, patching it could still work.", L"CasinoPatcher", MB_OK | MB_ICONINFORMATION);
+                }
+
+                AppendInfo(L"Click 'Patch file' to patch LCasino.exe and copy the GDI shim dll to the game directory.");
+
                 return 0;
             }
             case IDC_BTN_PATCH:
             {
                 wchar_t path[MAX_PATH]{};
                 GetWindowTextW(g_hEditPath, path, MAX_PATH);
+
+                if (path[0] == L'\0')
+                {
+                    MessageBoxW(hWnd, L"No file selected. Please select a file before patching.", L"CasinoPatcher", MB_OK | MB_ICONWARNING);
+                    return 0;
+                }
+
+                int r = MessageBoxW(hWnd, L"Ready to patch. Proceed?", L"Confirm patch", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+
+                if(r != IDYES)
+                {
+                    AppendInfo(L"Patch aborted.");
+                    return 0;
+                }
+
                 AppendInfo(L"Patching: " + std::wstring(path));
                 // TODO - do patching here
                 AppendInfo(L"Done.");
@@ -200,17 +347,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
-        g_hEditPath = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 12, 12, 420, 24, hWnd, (HMENU)IDC_EDIT_PATH, hInst, nullptr);
-        g_hBtnLoad = CreateWindowEx(0, L"BUTTON", L"Load file...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 440, 12, 120, 24, hWnd, (HMENU)IDC_BTN_LOAD, hInst, nullptr);
+        g_hLblPath = CreateWindowEx(0, L"STATIC", L"Target file:", WS_CHILD | WS_VISIBLE, 12, 16, 90, 20, hWnd, nullptr, hInst, nullptr);
+        g_hEditPath = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_READONLY, 110, 12, 322, 24, hWnd, (HMENU)IDC_EDIT_PATH, hInst, nullptr);
+        g_hBtnLoad = CreateWindowEx(0, L"BUTTON", L"Select file", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 440, 12, 120, 24, hWnd, (HMENU)IDC_BTN_LOAD, hInst, nullptr);
         g_hBtnPatch = CreateWindowEx(0, L"BUTTON", L"Patch file", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 12, 44, 120, 28, hWnd, (HMENU)IDC_BTN_PATCH, hInst, nullptr);
         g_hInfo = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL, 12, 84, 548, 260, hWnd, (HMENU)IDC_EDIT_INFO, hInst, nullptr);
 
+        SendMessageW(g_hLblPath, WM_SETFONT, (WPARAM)hFont, TRUE);
         SendMessageW(g_hEditPath, WM_SETFONT, (WPARAM)hFont, TRUE);
         SendMessageW(g_hBtnLoad, WM_SETFONT, (WPARAM)hFont, TRUE);
         SendMessageW(g_hBtnPatch, WM_SETFONT, (WPARAM)hFont, TRUE);
         SendMessageW(g_hInfo, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         EnableWindow(g_hBtnPatch, FALSE);
+
+        MessageBoxW(hWnd, L"Note: This patcher has been tested with versions 1.0.0.3 and 1.0.0.5 only. Theoretically it should work on the other versions as well, though no guarantees.", L"CasinoPatcher", MB_ICONINFORMATION | MB_OK);
+
+        wchar_t exePath[MAX_PATH];
+        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        PathRemoveFileSpecW(exePath);
+        std::wstring dllPath = std::wstring(exePath) + L"\\GDI3x.dll";
+        if (GetFileAttributesW(dllPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+        {
+            MessageBoxW(hWnd, L"GDI3x.dll not found. It should be placed in the same directory as CasinoPatcher.exe", L"CasinoPatcher", MB_ICONERROR | MB_OK);
+            PostQuitMessage(1);
+        }
+
         return 0;
     }
     case WM_SIZE:
@@ -221,7 +383,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         int top = 12;
         int btnW = 120;
         int editH = 24;
-        MoveWindow(g_hEditPath, margin, top, w - (margin * 3) - btnW, editH, TRUE);
+        int labelW = 50;
+        MoveWindow(g_hEditPath, margin + labelW + 8, top, w - (margin * 3) - btnW - labelW - 8, editH, TRUE);
         MoveWindow(g_hBtnLoad, w - margin - btnW, top, btnW, editH, TRUE);
         MoveWindow(g_hBtnPatch, margin, top + 32, btnW, 28, TRUE);
         int infoTop = top + 72;
