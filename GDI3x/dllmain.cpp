@@ -95,28 +95,23 @@ static inline void ForceBITMAPINFO_16bpp_Bitfields(LPBITMAPINFO lpbmi)
 
 extern "C" __declspec(dllexport) HBITMAP WINAPI CreateCompatibleBitmap(HDC hdc, int cx, int cy)
 {
-    //logger << "CreateCompatibleBitmap called - " << hdc << " - " << cx << " - " << cy << "\n";
     return pCreateCompatibleBitmap ? pCreateCompatibleBitmap(hdc, cx, cy) : NULL;
 }
 
 extern "C" __declspec(dllexport) HBITMAP WINAPI CreateDIBSection(HDC hdc, const BITMAPINFO* pbmi, UINT usage,
     void** ppvBits, HANDLE hSection, DWORD offset)
 {
-    //logger << "CreateDIBSection called - " << hdc << " - " << pbmi << " - " << usage << " - " << ppvBits << " - " << hSection << " - " << offset << "\n";
     return pCreateDIBSection ? pCreateDIBSection(hdc, pbmi, usage, ppvBits, hSection, offset) : NULL;
 }
 
 extern "C" __declspec(dllexport) BOOL WINAPI DeleteObject(HGDIOBJ ho)
 {
-    //logger << "DeleteObject called - " << ho << "\n";
     return pDeleteObject ? pDeleteObject(ho) : FALSE;
 }
 
 extern "C" __declspec(dllexport) int WINAPI GetDIBits(HDC hdc, HBITMAP hbm, UINT start, UINT cLines,
     LPVOID lpvBits, LPBITMAPINFO lpbmi, UINT usage)
 {
-    //logger << "GetDIBits called - " << hdc << " - " << hbm << " - " << start << " - " << cLines << " - " << lpvBits << " - " << lpbmi << " - " << usage << "\n";
-
     if (!pGetDIBits)
     {
         return 0;
@@ -125,8 +120,7 @@ extern "C" __declspec(dllexport) int WINAPI GetDIBits(HDC hdc, HBITMAP hbm, UINT
     // Call the real one first so size/width/height get filled in.
     int ret = pGetDIBits(hdc, hbm, start, cLines, lpvBits, lpbmi, usage);
 
-    // Probe pattern: lpvBits == NULL means "just fill BITMAPINFO"
-    // Your logs show exactly that.
+    // lpvBits == NULL means "just fill BITMAPINFO"
     if (ret != 0 && lpvBits == nullptr && lpbmi != nullptr)
     {
         // Only stomp the fields the game checks.
@@ -139,25 +133,21 @@ extern "C" __declspec(dllexport) int WINAPI GetDIBits(HDC hdc, HBITMAP hbm, UINT
 
 extern "C" __declspec(dllexport) int WINAPI GetDeviceCaps(HDC hdc, int index)
 {
-    //logger << "GetDeviceCaps called - " << hdc << " - " << index << "\n";
     return pGetDeviceCaps ? pGetDeviceCaps(hdc, index) : 0;
 }
 
 extern "C" __declspec(dllexport) HGDIOBJ WINAPI GetStockObject(int i)
 {
-    //logger << "GetStockObject called - " << i << "\n";
     return pGetStockObject ? pGetStockObject(i) : NULL;
 }
 
 extern "C" __declspec(dllexport) BOOL WINAPI PatBlt(HDC hdc, int x, int y, int w, int h, DWORD rop)
 {
-    //logger << "PatBlt called - " << hdc << " - " << x << " - " << y << " - " << w << " - " << h << " - " << rop << "\n";
     return pPatBlt ? pPatBlt(hdc, x, y, w, h, rop) : FALSE;
 }
 
 extern "C" __declspec(dllexport) HPALETTE WINAPI SelectPalette(HDC hdc, HPALETTE hpal, BOOL bForceBkgd)
 {
-    //logger << "SelectPalette called - " << hdc << " - " << hpal << " - " << bForceBkgd << "\n";
     return pSelectPalette ? pSelectPalette(hdc, hpal, bForceBkgd) : NULL;
 }
 
@@ -165,7 +155,6 @@ extern "C" __declspec(dllexport) int WINAPI SetDIBitsToDevice(HDC hdc, int XDest
     int XSrc, int YSrc, UINT uStartScan, UINT cScanLines,
     const VOID* lpvBits, const BITMAPINFO* lpbmi, UINT fuColorUse)
 {
-    //logger << "SetDIBitsToDevice called - " << hdc << " - " << XDest << " - " << YDest << " - " << dwWidth << " - " << dwHeight << " - " << XSrc << " - " << YSrc << " - " << uStartScan << " - " << cScanLines << " - " << lpvBits << " - " << lpbmi << " - " << fuColorUse << "\n";
     return pSetDIBitsToDevice ? pSetDIBitsToDevice(hdc, XDest, YDest, dwWidth, dwHeight, XSrc, YSrc, uStartScan, cScanLines, lpvBits, lpbmi, fuColorUse) : 0;
 }
 
@@ -192,9 +181,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     {
     case DLL_PROCESS_ATTACH:
     {
-        //logger.open("GDI_CALLS.log", std::ios::app);
-        //logger << "Started...\n";
-
         char path[MAX_PATH];
         GetSystemDirectoryA(path, MAX_PATH);
         strcat_s(path, "\\gdi32.dll");
@@ -202,12 +188,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
         if (hRealGDI)
         {
-            //logger << "Loaded real gdi32.dll\n";
             LoadRealFunctions();
-        }
-        else
-        {
-            //logger << "FAILED to load real gdi32.dll!\n";
         }
     }
     break;
@@ -215,7 +196,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     case DLL_PROCESS_DETACH:
         if (hRealGDI)
         {
-            //logger << "detached DLL\n";
             FreeLibrary(hRealGDI);
         }
         break;
